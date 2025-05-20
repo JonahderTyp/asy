@@ -59,27 +59,34 @@ def create_pdf_with_images(output_filename, image_paths, rotations=[0, 0, 0, 0],
 
 
 if __name__ == "__main__":
-    # Example usage
-    output_pdf = "output.pdf"
-
     # Replace these with your actual image paths
     # Order: [top-left, top-right, bottom-left, bottom-right]
-    image_files = [
+    front = [
         "output/aruco_marker_10.png",
         "output/aruco_marker_11.png",
         "output/aruco_marker_12.png",
         "output/aruco_marker_13.png",
     ]
 
+    back = [
+        "output/aruco_marker_14.png",
+        "output/aruco_marker_15.png",
+        "output/aruco_marker_16.png",
+        "output/aruco_marker_17.png",
+    ]
+
     # Rotation angles for each corner (in degrees)
     # Order matches image_files: [top-left, top-right, bottom-left, bottom-right]
     rotation_angles = [
-        0,    # Top-left (no rotation)
+        180,    # Top-left (no rotation)
         90,   # Top-right (rotate 90° clockwise)
         270,  # Bottom-left (rotate 90° counter-clockwise)
-        180    # Bottom-right (upside down)
+        0    # Bottom-right (upside down)
     ]
 
     # Create PDF with 10mm padding and rotations
-    create_pdf_with_images(output_pdf, image_files,
+    create_pdf_with_images("front.pdf", front,
+                           rotations=rotation_angles, padding=10)
+
+    create_pdf_with_images("back.pdf", back,
                            rotations=rotation_angles, padding=10)
