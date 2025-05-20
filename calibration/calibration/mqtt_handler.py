@@ -1,0 +1,74 @@
+# mqtt_handler.py
+import json
+from typing import Any, Dict, List
+
+import paho.mqtt.client as mqtt
+from message import Messages
+from paho.mqtt.client import MQTTMessage
+from playfield import Playfield, Text, circle, point, polygon
+
+
+class MqttHandler:
+    def __init__(self, broker: str, port: int, topic: str, username, password):
+        self.topic = topic
+        self._last_messages = Messages()
+
+        self.client = mqtt.Client()
+        self.client.tls_set()
+        self.client.username_pw_set(username, password)
+        self.client.on_connect = self._on_connect
+
+        print(f"Connecting to MQTT broker {broker}:{port}...")
+        self.client.connect(broker, port, keepalive=60)
+        print("Connected to MQTT broker... Starting loop...")
+        self.client.loop_start()
+
+    def _on_connect(self, client: mqtt.Client, userdata, flags, rc):
+        if rc == 0:
+            print(f"Connected — subscribing to {self.topic}")
+            client.subscribe(self.topic)
+        else:
+            print(f"MQTT connect failed (code {rc})")
+
+    def send(self, pf: Playfield):
+        for id, form in pf.get_forms().items():
+            if isinstance(form, circle):
+                payload = {
+                    "id": id,
+                    "type": "circle",
+                    "x": form.center.x,
+                    "y": form.center.y,
+                    "radius": form.radius,
+                    "color": form.color,
+                }
+            elif isinstance(form, polygon):
+                payload = {
+                    "id": id,
+                    "type": "polygon",
+                    "points": [{"x": p.x, "y": p.y} for p in form.points],
+                    "color": form.color,
+                }
+            elif isinstance(form, Text):
+                payload = {
+                    "id": id,
+                    "type": "text",
+                    "x": form.position.x,
+                    "y": form.position.y,
+                    "text": form.text,
+                    "size": form.size,
+                    "color": form.color,
+                }
+            elif form is None:
+                payload = {
+                    "id": id,
+                }
+            else:
+                raise ValueError(
+                    f"Unsupported form type {type(form)} for id {id}")
+
+            self.client.publish(self.topic, json.dumps(payload))
+            self._last_messages.add_message(form, id)
+
+    def disconnect(self):
+        self.client.loop_stop()
+        self.client.disconnect()
