@@ -1,13 +1,9 @@
 from typing import List
 
+import numpy as np
+from numpy.typing import NDArray
 
-class point:
-    def __init__(self, x=0, y=0):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return f"point({self.x}, {self.y})"
+Point2D = NDArray[np.float64]
 
 
 class form:
@@ -18,15 +14,15 @@ class form:
 
 
 class circle(form):
-    def __init__(self, color, center: point, radius: float = 0, fill: bool = False):
+    def __init__(self, color, center_point: Point2D, radius: float = 0, fill: bool = False):
         super().__init__(color)
-        self.center = center
+        self.center = center_point
         self.radius = radius
         self.fill = fill
 
 
 class polygon(form):
-    def __init__(self, color, points: List[point]):
+    def __init__(self, color, points: List[Point2D]):
         super().__init__(color)
         self.points = points
 
@@ -42,18 +38,25 @@ class Text(form):
         self.size = size
 
 
-class playfield:
+class Playfield:
     def __init__(self, width=100, height=100):
         self.width = width
         self.height = height
         self._forms = {}
 
-    def add_form(self, form: form, id):
-        if id in self._forms:
-            raise KeyError(f"Form with id {id} already exists.")
+    def clear(self):
+        for id in self._forms:
+            self._forms[id] = None
+
+    def put_form(self, id: int, form: form):
         self._forms[id] = form
 
-    def update_form(self, form: form, id):
+    def add_form(self, id: int, form: form):
+        if id in self._forms:
+            raise KeyError(f"Form with id {id} already exists.")
+        self.put_form(id, form)
+
+    def update_form(self, id: int, form: form):
         if id not in self._forms:
             raise KeyError(f"Form with id {id} not found.")
         self._forms[id] = form
@@ -67,5 +70,8 @@ class playfield:
     def get_form(self, id):
         return self._forms.get(id)
 
-    def get_mqtt_message(self):
+    def get_forms(self):
         return self._forms
+
+    def __repr__(self):
+        return f"playfield({self.width}, {self.height})"
