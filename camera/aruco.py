@@ -38,16 +38,16 @@ def intersection_from_4points(pts):
 
 def detect_aruco_markers():
 
-    image = cv2.imread("testimg.png")
-    if image is None:
-        raise FileNotFoundError(f"Could not load image at 'testimg.png'")
+    # image = cv2.imread("testimg.png")
+    # if image is None:
+    #     raise FileNotFoundError(f"Could not load image at 'testimg.png'")
 
     # Set up ArUco detector
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters()
 
     # Initialize the camera
-    # cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0)
 
     # Set the dictionary for ArUco markers (using 4x4 markers with 50 ids)
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
@@ -57,12 +57,12 @@ def detect_aruco_markers():
 
     while True:
         # Capture frame-by-frame
-        # ret, frame = cap.read()
-        frame = image.copy()
+        ret, frame = cap.read()
+        # frame = image.copy()
 
-        # if not ret:
-        #     print("Failed to capture frame")
-        #     break
+        if not ret:
+            print("Failed to capture frame")
+            break
 
         # Convert to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -104,12 +104,12 @@ def detect_aruco_markers():
 
         print(centers)
 
-        p = intersection_from_4points(centers)
+        # p = intersection_from_4points(centers)
 
-        print(p)
+        # print(p)
 
         # Draw the intersection point
-        cv2.circle(frame, tuple(p.astype(int)), 5, (255, 0, 0), -1)
+        # cv2.circle(frame, tuple(p.astype(int)), 5, (255, 0, 0), -1)
 
         # Display the resulting frame
         cv2.imshow('ArUco Marker Detection', cv2.resize(frame, (1600, 1200)))
