@@ -11,6 +11,22 @@ class FrameProcessor:
     def __init__(self, frame: np.ndarray | None = None):
         self.frame = frame
         self.codes = find_codes(self.frame)
+        self.center = None
+
+        ordered_codes = [
+            self.codes.get(10),
+            self.codes.get(11),
+            self.codes.get(12),
+            self.codes.get(13),
+        ]
+
+        if all(code is not None for code in ordered_codes):
+            self.center = self._intersection_from_4points(
+                ordered_codes[0].center,
+                ordered_codes[1].center,
+                ordered_codes[2].center,
+                ordered_codes[3].center
+            )
 
     @staticmethod
     def _intersection_from_4points(TL: Point2Da, TR: Point2Da, BL: Point2Da, BR: Point2Da) -> Point2Da:
@@ -49,33 +65,9 @@ class FrameProcessor:
             # Draw the center of the code
             cv2.circle(marked_frame, tuple(code.center), 5, (0, 255, 0), -1)
 
-        try:
-            ordered_codes = [
-                self.codes.get(10),
-                self.codes.get(11),
-                self.codes.get(12),
-                self.codes.get(13),
-            ]
-
-            if all(code is not None for code in ordered_codes):
-                cp1 = self._intersection_from_4points(
-                    ordered_codes[0].center,
-                    ordered_codes[1].center,
-                    ordered_codes[2].center,
-                    ordered_codes[3].center
-                )
-
-                # lines between the codes
-                cv2.line(marked_frame, tuple(ordered_codes[0].center),
-                         tuple(ordered_codes[3].center), (255, 0, 0), 2)
-                cv2.line(marked_frame, tuple(ordered_codes[2].center),
-                         tuple(ordered_codes[1].center), (255, 0, 0), 2)
-
-                cv2.circle(marked_frame, (int(cp1.x), int(cp1.y)),
-                           5, (0, 255, 255), 2)
-
-        except Exception as e:
-            print(f"Error: {e}")
-            pass
+        if self.center is not None:
+            # Draw the center of the intersection
+            cv2.circle(marked_frame, (int(self.center.x),
+                       int(self.center.y)), 5, (0, 0, 255), -1)
 
         return marked_frame
