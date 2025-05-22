@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 
 import cv2
@@ -7,22 +8,76 @@ from dotenv import load_dotenv
 
 from .calibrator import calibrate
 from .camera import Camera
+from .datastructures import Playfield, Point2Da
 from .mqtt_handler import MqttHandler
+from .transformer import HomographyTransformer
 
 
-def main():
+def load_transformer(source_points_file: str, target_points_file: str) -> HomographyTransformer:
+    with open(source_points_file, "r") as f:
+        points_json: dict = json.load(f)
+        source_points: list[Point2Da] = [
+            Point2Da(float(p["x"]), float(p["y"]))
+            for p in points_json.values()
+        ]
+        print(f"Loaded {len(source_points)} source calibration points.")
+        # print(type(source_points))
+        # print(source_points)
+
+    with open(target_points_file, "r") as f:
+        points_json: dict = json.load(f)
+        target_points: list[Point2Da] = [
+            Point2Da(float(p["x"]), float(p["y"]))
+            for p in points_json.values()
+        ]
+        print(f"Loaded {len(target_points)} target calibration points.")
+        # print(type(target_points))
+        # print(target_points)
+
+    if len(source_points) != len(target_points):
+        raise ValueError(
+            f"Source and target points must have the same number of points. "
+            f"Got {len(source_points)} and {len(target_points)}."
+        )
+
+    if len(source_points) < 4:
+        raise ValueError(
+            f"Need at least 4 points for homography transformation. "
+            f"Got {len(source_points)}."
+        )
+
+    if len(source_points) != 4:
+        raise ValueError(
+            f"Need exactly 4 points for homography transformation. "
+            f"Got {len(source_points)}."
+        )
+
+    return HomographyTransformer(source_points, target_points)
+
+
+def main(camera_id: int, width: int, height: int):
+    """
+    Main function to capture and process camera frames.
+    """
+
+    pf = Playfield(1000, 500)
+
+    # Load calibration points
+    pf_to_pixel = load_transformer("cal_table.json", "cal_projector.json")
+
+    # print(pf_to_pixel.map_point(Point2Da(100, 200)))
+
     try:
-        camera = Camera(camera_id=0)  # , width=800, height=600)
+        camera = Camera(camera_id, width, height)
         # image = cv2.imread("testimg.png")
         while True:
             frame = camera.get_frame()
             # frame = image.copy()
 
-            frame = camera.process_frame(frame)
+            code_frame = camera.process_frame(frame.copy())
 
-            # print(type(frame), frame.shape)
-
-            cv2.imshow('Frame', frame)
+            cv2.imshow('Codes', frame)
+            cv2.imshow('Hands', code_frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -57,19 +112,8 @@ if __name__ == "__main__":
                        os.getenv("MQTT_USER"),
                        os.getenv("MQTT_PASSWORD"))
 
-    # points_file: str = "cal_table.json"
-    # with open(points_file, "r") as f:
-    #     points_json: dict = json.load(f)
-    #     points: list[Point2Da] = [
-    #         Point2Da(float(p["x"]), float(p["y"]))
-    #         for p in points_json.values()
-    #     ]
-    #     print(f"Loaded {len(points)} calibration points.")
-    #     print(type(points))
-    #     print(points)
-
     if args.calibration:
         calibrate(mqtt)
         exit(1)
 
-    main()
+    main(args.camera_id, args.width, args.height)
