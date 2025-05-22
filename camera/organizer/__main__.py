@@ -10,6 +10,7 @@ from .calibrator import calibrate
 from .camera import Camera
 from .datastructures import Playfield, Point2Da
 from .mqtt_handler import MqttHandler
+from .pcb_tracker import FrameProcessor
 from .transformer import HomographyTransformer
 
 
@@ -69,15 +70,15 @@ def main(camera_id: int, width: int, height: int):
 
     try:
         camera = Camera(camera_id, width, height)
-        # image = cv2.imread("testimg.png")
+        image = cv2.imread("testimg.png")
         while True:
-            frame = camera.get_frame()
-            # frame = image.copy()
+            # frame = camera.get_frame()
+            frame = image.copy()
 
-            code_frame = camera.process_frame(frame.copy())
+            cp = FrameProcessor(frame)
 
             cv2.imshow('Codes', frame)
-            cv2.imshow('Hands', code_frame)
+            cv2.imshow('Hands', cp.get_marked_frame())
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 

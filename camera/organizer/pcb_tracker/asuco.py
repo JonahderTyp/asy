@@ -1,11 +1,11 @@
 import cv2
 import cv2.aruco as aruco
 
-from ..datastructures import Point2D
+from ..datastructures import Point2Da
 
 
 class Code:
-    def __init__(self, id: int, center: Point2D | None = None):
+    def __init__(self, id: int, center: Point2Da | None = None):
         self.id = id
         self.center = center
 
@@ -19,11 +19,12 @@ class Code:
 def find_codes(
         frame,
         aruco_dict=aruco.getPredefinedDictionary(aruco.DICT_4X4_50),
-        parameters=aruco.DetectorParameters()) -> list[Code]:
+        parameters=aruco.DetectorParameters()) -> dict[str, Code]:
     """
     Find ArUco codes in the given frame.
     """
-    codes = []
+
+    codes = {}
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -38,9 +39,7 @@ def find_codes(
             # Get the center of the marker
             corner = corners[i][0]
             center = corner.mean(axis=0)
-
-            # print(type(center.astype(int)))
-
-            codes.append(Code(ids[i][0], center.astype(int)))
+            code = Code(ids[i][0], center.astype(int))
+            codes[code.id] = code
 
     return codes
