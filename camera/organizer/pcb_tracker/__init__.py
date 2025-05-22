@@ -40,24 +40,7 @@ class FrameProcessor:
 
         # intersection point on line P1 + t·r
         intersection = TL + t * r
-        return intersection
-
-    @staticmethod
-    def _centroid_of_4points(TL: Point2Da, TR: Point2Da,
-                             BL: Point2Da, BR: Point2Da) -> Point2Da:
-        """
-        Returns the arithmetic mean of TL, TR, BL, BR,
-        i.e. the centroid of those four points.
-        """
-        pts = np.stack([TL, TR, BL, BR])      # shape (4,2)
-        avg = pts.mean(axis=0)                # shape (2,)
-        return Point2Da(*avg)
-
-    @staticmethod
-    def centroid(pts: Sequence[Point2Da]) -> Point2Da:
-        arr = np.stack(pts)           # e.g. shape (N,2)
-        x_mean, y_mean = arr.mean(axis=0)
-        return Point2Da(x_mean, y_mean)
+        return Point2Da(*intersection)
 
     def get_marked_frame(self) -> np.ndarray:
         marked_frame = self.frame.copy()
@@ -66,49 +49,33 @@ class FrameProcessor:
             # Draw the center of the code
             cv2.circle(marked_frame, tuple(code.center), 5, (0, 255, 0), -1)
 
-        cp = None
         try:
             ordered_codes = [
-                self.codes.get(0),
-                self.codes.get(1),
-                self.codes.get(2),
-                self.codes.get(3),
+                self.codes.get(10),
+                self.codes.get(11),
+                self.codes.get(12),
+                self.codes.get(13),
             ]
-            cp = self._intersection_from_4points(
-                ordered_codes[0].center,
-                ordered_codes[1].center,
-                ordered_codes[2].center,
-                ordered_codes[3].center
-            )
+
+            if all(code is not None for code in ordered_codes):
+                cp1 = self._intersection_from_4points(
+                    ordered_codes[0].center,
+                    ordered_codes[1].center,
+                    ordered_codes[2].center,
+                    ordered_codes[3].center
+                )
+
+                # lines between the codes
+                cv2.line(marked_frame, tuple(ordered_codes[0].center),
+                         tuple(ordered_codes[3].center), (255, 0, 0), 2)
+                cv2.line(marked_frame, tuple(ordered_codes[2].center),
+                         tuple(ordered_codes[1].center), (255, 0, 0), 2)
+
+                cv2.circle(marked_frame, (int(cp1.x), int(cp1.y)),
+                           5, (0, 255, 255), 2)
+
         except Exception as e:
+            print(f"Error: {e}")
             pass
 
-        if cp:
-            cv2.circle(marked_frame, cp, 5, (0, 255, 255), -1)
-
         return marked_frame
-
-
-# def process_frame(self, frame: np.ndarray | None = None):
-#     codes = find_codes(frame)
-#     # print(codes)
-
-#     for code in codes.values():
-#         # Draw the center of the code
-#         cv2.circle(frame, tuple(code.center), 5, (0, 255, 0), -1)
-
-#     ordered_codes = [
-#         codes.get(0),
-#         codes.get(1),
-#         codes.get(2),
-#         codes.get(3),
-#     ]
-
-#     c1 = self._intersection_from_4points(
-#         ordered_codes[0].center,
-#         ordered_codes[1].center,
-#         ordered_codes[2].center,
-#         ordered_codes[3].center
-#     )
-
-#     return frame
