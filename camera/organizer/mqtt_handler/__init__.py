@@ -13,6 +13,7 @@ class MqttHandler:
     def __init__(self, broker: str, port: int, topic: str, username, password):
         self.topic = topic
         self._last_messages = Messages()
+        self._connected = False
 
         self.client = mqtt.Client()
         self.client.tls_set()
@@ -22,11 +23,14 @@ class MqttHandler:
         print(f"Connecting... to MQTT broker {broker}:{port}...")
         self.client.connect(broker, port, keepalive=60)
         self.client.loop_start()
-        sleep(2)
+
+        while not self._connected:
+            pass
 
     def _on_connect(self, client: mqtt.Client, userdata, flags, rc):
         if rc == 0:
             print(f"Connected")
+            self._connected = True
         else:
             print(f"MQTT connect failed (code {rc})")
 
