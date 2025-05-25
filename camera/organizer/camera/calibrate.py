@@ -3,30 +3,36 @@ import os
 from time import sleep
 from typing import Any, Dict, List
 
+import cv2
 import numpy as np
-import readchar
 
+from ..camera import Camera
 from ..datastructures import (Circle, Messages, Playfield, Point2D, Point2Da,
                               Polygon, Text)
-from ..mqtt_handler import MqttHandler
+from ..keyboard_listener import KeyboardListener
 
 
-def calibrate_projector(mqtt: MqttHandler, cal_file: str = "cal_projector.json"):
+def calibrate_camera(camera: Camera, cal_file: str = "cal_cam.json"):
     """
     Calibrate the system.
     """
-
-    # Load calibration points from file
-
-    ppf = Playfield(int(os.getenv("PROJECTOR_WIDTH")),
-                    int(os.getenv("PROJECTOR_HEIGHT")))
-
-    points: List[Point2Da] = [
-        Point2Da(ppf.width*(1/4), ppf.height*(1/4)),
-        Point2Da(ppf.width*(3/4), ppf.height*(1/4)),
-        Point2Da(ppf.width*(1/4), ppf.height*(3/4)),
-        Point2Da(ppf.width*(3/4), ppf.height*(3/4))
-    ]
+    print(cal_file)
+    if os.path.exists(cal_file):
+        with open(cal_file, "r") as f:
+            points_json: dict = json.load(f)
+            points: list[Point2Da] = [
+                Point2Da(float(p["x"]), float(p["y"]))
+                for p in points_json.values()
+            ]
+            print(f"Loaded {len(points)} source calibration points.")
+    else:
+        points: List[Point2Da] = [
+            Point2Da(camera.width*(1/4), camera.height*(1/4)),
+            Point2Da(camera.width*(3/4), camera.height*(1/4)),
+            Point2Da(camera.width*(1/4), camera.height*(3/4)),
+            Point2Da(camera.width*(3/4), camera.height*(3/4))
+        ]
+        print(f"Created {len(points)} default calibration points.")
 
     selected = -1
 
@@ -37,25 +43,29 @@ def calibrate_projector(mqtt: MqttHandler, cal_file: str = "cal_projector.json")
     print("Hold SHIFT to move points slower.")
     print(f"Selected: {selected + 1}")
 
+    listener = KeyboardListener()
+
     while True:
-        rawkey = readchar.readkey()
+        frame = camera.get_frame()
+        # rawkey = readchar.readkey()
+        if listener.key_available():
+            rawkey = listener.get_key()
+            print()
+        else:
+            rawkey = ""
         upper = rawkey.isupper()
         key = rawkey.lower()
 
-        if key == 'q' or key == readchar.key.ESC:
+        if key == 'q':
             print("Exit key pressed. Goodbye!")
-            ppf.clear()
-            mqtt.send(ppf)
             sleep(1)
             break
 
         if key == 'e':
             print("Saving calibration data...")
             data = {i: {"x": p.x, "y": p.y} for i, p in enumerate(points)}
-            with open("cal_projector.json", "w") as f:
+            with open(cal_file, "w") as f:
                 f.write(json.dumps(data, indent=4))
-            ppf.clear()
-            mqtt.send(ppf)
             sleep(1)
             break
 
@@ -85,9 +95,18 @@ def calibrate_projector(mqtt: MqttHandler, cal_file: str = "cal_projector.json")
                 color = (255, 0, 0)
             else:
                 color = (255, 255, 255)
-            t = Text(color=color, position=p, text=str(i+1), size=20)
-            c = Circle(color=color, center=p, radius=5)
-            ppf.put_form(i*10+1, t)
-            ppf.put_form(i*10, c)
 
-        mqtt.send(ppf)
+            cv2.circle(frame, (int(p.x), int(p.y)), 5, (0, 255, 0), 1)
+            cv2.circle(frame, (int(p.x), int(p.y)), 1, (0, 255, 0), -1)
+            pt = p + Point2Da(20, 20)
+            cv2.putText(frame, str(i+1), (int(pt.x), int(pt.y)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+        cv2.imshow('Hands', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    print("\n")
+    listener.stop()
+    camera.cap.release()
+    cv2.destroyAllWindows()

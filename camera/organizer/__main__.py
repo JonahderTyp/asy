@@ -6,8 +6,9 @@ import cv2
 import numpy as np
 from dotenv import load_dotenv
 
-from .calibrator import calibrate
+from .calibrator import calibrate_projector
 from .camera import Camera
+from .camera.calibrate import calibrate_camera
 from .datastructures import Playfield, Point2Da
 from .mqtt_handler import MqttHandler
 from .pcb_tracker import FrameProcessor
@@ -56,7 +57,7 @@ def load_transformer(source_points_file: str, target_points_file: str) -> Homogr
     return HomographyTransformer(source_points, target_points)
 
 
-def main(camera_id: int, width: int, height: int):
+def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
     """
     Main function to capture and process camera frames.
     """
@@ -66,18 +67,20 @@ def main(camera_id: int, width: int, height: int):
     # Load calibration points
     pf_to_pixel = load_transformer("cal_table.json", "cal_projector.json")
 
+    cam_to_pf = load_transformer("cal_cam.json", "cal_table.json")
+
     # print(pf_to_pixel.map_point(Point2Da(100, 200)))
 
     try:
-        camera = Camera(camera_id, width, height)
+        camera = Camera(camera_id, width, height, rotate)
         image = cv2.imread("testimg.png")
         while True:
-            # frame = camera.get_frame()
-            frame = image.copy()
+            frame = camera.get_frame()
+            # frame = image.copy()
 
             cp = FrameProcessor(frame)
 
-            cv2.imshow('Codes', frame)
+            # cv2.imshow('Codes', frame)
             cv2.imshow('Hands', cp.get_marked_frame())
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -104,7 +107,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--height", type=int, default=600, help="Height of the frame (default: 600)")
     parser.add_argument(
-        "--calibration", action="store_true", help="Calibration mode")
+        "--projector", action="store_true", help="Calibrate Projector")
+    parser.add_argument(
+        "--camera", action="store_true", help="Calibrate Camera")
+    parser.add_argument(
+        "--rotate", action="store_true", help="Rotate camera frame")
     args = parser.parse_args()
 
     mqtt = MqttHandler(os.getenv("MQTT_BROKER"),
@@ -113,8 +120,13 @@ if __name__ == "__main__":
                        os.getenv("MQTT_USER"),
                        os.getenv("MQTT_PASSWORD"))
 
-    if args.calibration:
-        calibrate(mqtt)
+    if args.projector:
+        calibrate_projector(mqtt)
         exit(1)
 
-    main(args.camera_id, args.width, args.height)
+    if args.camera:
+        calibrate_camera(Camera(args.camera_id, args.width,
+                         args.height, args.rotate), "cal_cam.json")
+        exit(1)
+
+    main(args.camera_id, args.width, args.height, args.rotate)
