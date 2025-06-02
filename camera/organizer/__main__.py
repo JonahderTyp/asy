@@ -94,13 +94,13 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
             cp = PCB_FrameProcessor(frame)
 
-            if cp.center:
+            if cp.center is not None:
                 pf.put_form(
                     1,
                     Circle(
                         center=cam_to_pf.map_point(cp.center),
                         radius=50,
-                        color=(255, 0, 0),
+                        color=(255, 255, 0),
                         fill=True
                     )
                 )
@@ -134,8 +134,6 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
             cv2.imshow('Hands', hands)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-
-            # sleep(1)
 
     # except ValueError as e:
     #     print(f"Error: {e}")
