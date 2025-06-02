@@ -7,8 +7,8 @@ import cv2
 import numpy as np
 
 from ..camera import Camera
-from ..datastructures import (Circle, Messages, Playfield, Point2D, Point2Da,
-                              Polygon, Text)
+from ..datastructures import (Circle, Messages, Playfield, Point2Da, Polygon,
+                              Text)
 from ..keyboard_listener import KeyboardListener
 
 
