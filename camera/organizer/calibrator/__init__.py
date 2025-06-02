@@ -6,8 +6,8 @@ from typing import Any, Dict, List
 import numpy as np
 import readchar
 
-from ..datastructures import (Circle, Messages, Playfield, Point2D, Point2Da,
-                              Polygon, Text)
+from ..datastructures import (Circle, Messages, Playfield, Point2Da, Polygon,
+                              Text)
 from ..mqtt_handler import MqttHandler
 
 
