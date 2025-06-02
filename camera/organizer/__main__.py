@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from time import sleep
 
 import cv2
 import numpy as np
@@ -9,9 +10,10 @@ from dotenv import load_dotenv
 from .calibrator import calibrate_projector
 from .camera import Camera
 from .camera.calibrate import calibrate_camera
-from .datastructures import Playfield, Point2Da
+from .datastructures import Circle, Playfield, Point2Da
+from .hand_tracker import HandTracker
 from .mqtt_handler import MqttHandler
-from .pcb_tracker import FrameProcessor
+from .pcb_tracker import FrameProcessor as PCB_FrameProcessor
 from .transformer import HomographyTransformer
 
 
@@ -54,6 +56,10 @@ def load_transformer(source_points_file: str, target_points_file: str) -> Homogr
             f"Got {len(source_points)}."
         )
 
+    print("Mapping points:")
+    for i, (src, tgt) in enumerate(zip(source_points, target_points)):
+        print(f"Point {i + 1}: Source {src} -> Target {tgt}")
+
     return HomographyTransformer(source_points, target_points)
 
 
@@ -64,33 +70,78 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
     pf = Playfield(1000, 500)
 
-    # Load calibration points
-    pf_to_pixel = load_transformer("cal_table.json", "cal_projector.json")
+    projector_pf = Playfield(os.getenv("PROJECTOR_WIDTH"),
+                             os.getenv("PROJECTOR_HEIGHT"))
 
+    # Load calibration points
+    print("Loading pf_to_pixel points...")
+    pf_to_pixel = load_transformer("cal_table.json", "cal_projector.json")
+    # pf_to_pixel = load_transformer("cal_projector.json", "cal_table.json")
+
+    print("Loading cam_to_pf points...")
     cam_to_pf = load_transformer("cal_cam.json", "cal_table.json")
 
     # print(pf_to_pixel.map_point(Point2Da(100, 200)))
 
     try:
         camera = Camera(camera_id, width, height, rotate)
-        image = cv2.imread("testimg.png")
+        image = cv2.resize(cv2.imread("testimg.png"), [800, 600])
+        ht = HandTracker()
         while True:
+            pf.clear()
             frame = camera.get_frame()
             # frame = image.copy()
 
-            cp = FrameProcessor(frame)
+            cp = PCB_FrameProcessor(frame)
+
+            if cp.center:
+                pf.put_form(
+                    1,
+                    Circle(
+                        center=cam_to_pf.map_point(cp.center),
+                        radius=50,
+                        color=(255, 0, 0),
+                        fill=True
+                    )
+                )
+
+            hands = ht.detect_hands(frame)
+            mapped_hands = cam_to_pf.map_object(ht.get_hand_positions())
+            for nrh, hand in enumerate(mapped_hands):
+                if len(hand) < 4:
+                    continue
+                id = 100 * (nrh + 1)
+
+                for i, point in enumerate(hand):
+                    # Convert hand points to playfield coordinates
+                    pf.put_form(
+                        id + i,
+                        Circle(
+                            center=Point2Da(point.x, point.y),
+                            radius=10,
+                            color=(0, 255, 0)
+                        )
+                    )
 
             # cv2.imshow('Codes', frame)
-            cv2.imshow('Hands', cp.get_marked_frame())
+
+            projector = pf.transform(pf_to_pixel,
+                                     int(os.getenv("PROJECTOR_WIDTH")),
+                                     int(os.getenv("PROJECTOR_HEIGHT")))
+
+            cv2.imshow('Playfield', pf.render())
+            cv2.imshow('Projector', projector.render())
+            cv2.imshow('PCB', cp.get_marked_frame())
+            cv2.imshow('Hands', hands)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-    except ValueError as e:
-        print(f"Error: {e}")
+            # sleep(1)
+
+    # except ValueError as e:
+    #     print(f"Error: {e}")
     except KeyboardInterrupt:
         print("Exiting...")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
     finally:
         camera.cap.release()
         cv2.destroyAllWindows()

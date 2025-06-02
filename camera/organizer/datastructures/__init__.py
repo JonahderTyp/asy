@@ -9,9 +9,7 @@ import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
 
-from ..transformer import HomographyTransformer
-
-Point2D = NDArray[float64]
+# from ..transformer import HomographyTransformer
 
 
 class Point2Da(np.ndarray):
@@ -93,7 +91,7 @@ class Form:
 
 
 class Circle(Form):
-    def __init__(self, color, center: Point2D, radius: float = 0, fill: bool = False):
+    def __init__(self, color, center: Point2Da, radius: float = 0, fill: bool = False):
         super().__init__(color)
         self.center = center
         self.radius = radius
@@ -104,7 +102,7 @@ class Circle(Form):
         return json.dumps({
             "type": "Circle",
             "color": self.color,
-            "center": {"x": self.center[0], "y": self.center[1]},
+            "center": {"x": self.center.x, "y": self.center.y},
             "radius": self.radius,
             "fill": self.fill
         })
@@ -116,9 +114,15 @@ class Circle(Form):
         center = Point2Da(data["center"]["x"], data["center"]["y"])
         return Circle(color=data["color"], center=center, radius=data["radius"], fill=data.get("fill", False))
 
+    def __str__(self):
+        return f"Circle(center=({self.center[0]}, {self.center[1]}), radius={self.radius}, color={self.color}, fill={self.fill})"
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class Polygon(Form):
-    def __init__(self, color, points: List[Point2D]):
+    def __init__(self, color, points: List[Point2Da]):
         super().__init__(color)
         self.points = points
 
@@ -143,7 +147,7 @@ class Polygon(Form):
 
 
 class Text(Form):
-    def __init__(self, color, position: Point2D, text: str, size: int = 36):
+    def __init__(self, color, position: Point2Da, text: str, size: int = 36):
         super().__init__(color)
         self.position: Point2Da = position
         self.text = text
@@ -231,40 +235,51 @@ class Playfield:
             playfield.put_form(int(id), form)
         return playfield
 
-    def render(self) -> np.ndarray:
+    def render(self, offset: Point2Da = Point2Da(100, 100)) -> np.ndarray:
         """
         Render the playfield to an image with all forms drawn.
         """
         # Create a blank image (black background)
-        image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+
+        image = np.full((self.height + int(offset.x * 2),
+                         self.width + int(offset.y * 2),
+                         3), fill_value=127,
+                        dtype=np.uint8)
+
+        image[int(offset.y):int(offset.y + self.height),
+              int(offset.x):int(offset.x + self.width)] = (0, 0, 0)
 
         for form in self._forms.values():
             if form is None:
                 continue
 
             if isinstance(form, Circle):
-                center = (int(form.center[0]), int(form.center[1]))
+                center = (int(form.center[0] + offset.x),
+                          int(form.center[1] + offset.y))
                 radius = int(form.radius)
                 color = tuple(map(int, form.color))
                 thickness = -1 if form.fill else 2
                 cv2.circle(image, center, radius, color, thickness)
 
             elif isinstance(form, Polygon):
-                pts = np.array([[int(p[0]), int(p[1])]
-                                for p in form.points], dtype=np.int32)
+                pts = np.array([
+                    [int(p[0] + offset.x), int(p[1] + offset.y)]
+                    for p in form.points
+                ], dtype=np.int32)
                 pts = pts.reshape((-1, 1, 2))
                 color = tuple(map(int, form.color))
                 cv2.polylines(image, [pts], isClosed=True,
                               color=color, thickness=2)
 
             elif isinstance(form, Text):
-                position = (int(form.position[0]), int(form.position[1]))
+                position = (
+                    int(form.position[0] + offset.x), int(form.position[1] + offset.y))
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                font_scale = form.size / 36  # Scale relative to default
+                font_scale = form.size / 36
                 color = tuple(map(int, form.color))
                 thickness = 1
-                cv2.putText(image, form.text, position, font, font_scale,
-                            color, thickness, lineType=cv2.LINE_AA)
+                cv2.putText(image, form.text, position, font,
+                            font_scale, color, thickness, lineType=cv2.LINE_AA)
 
             else:
                 raise ValueError(
@@ -280,7 +295,9 @@ class Playfield:
         pf = Playfield(width, height)
 
         for id, form in self._forms.items():
-            if isinstance(form, Circle):
+            if form is None:
+                continue
+            elif isinstance(form, Circle):
                 pf.put_form(id, Circle(
                     color=form.color,
                     center=transformer.map_point(form.center),
