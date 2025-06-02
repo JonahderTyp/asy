@@ -125,12 +125,11 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
             # cv2.imshow('Codes', frame)
 
-            projector = pf.transform(pf_to_pixel,
-                                     int(os.getenv("PROJECTOR_WIDTH")),
-                                     int(os.getenv("PROJECTOR_HEIGHT")))
+            pf.transform(pf_to_pixel,
+                         projector_pf)
 
             cv2.imshow('Playfield', pf.render())
-            cv2.imshow('Projector', projector.render())
+            cv2.imshow('Projector', projector_pf.render())
             cv2.imshow('PCB', cp.get_marked_frame())
             cv2.imshow('Hands', hands)
             if cv2.waitKey(1) & 0xFF == ord('q'):
