@@ -1,9 +1,15 @@
 
+from __future__ import annotations
+
+import json
 from typing import Dict, List
 
+import cv2
 import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
+
+from ..transformer import HomographyTransformer
 
 Point2D = NDArray[float64]
 
@@ -35,6 +41,16 @@ class Point2Da(np.ndarray):
     def __repr__(self):
         return f"Point2D(x={self.x}, y={self.y})"
 
+    def to_json(self) -> str:
+        """Convert the Point2D to a JSON string."""
+        return json.dumps({"x": self.x, "y": self.y})
+
+    @staticmethod
+    def from_json(json_str: str) -> 'Point2Da':
+        """Create a Point2D from a JSON string."""
+        data = json.loads(json_str)
+        return Point2Da(data["x"], data["y"])
+
 
 class Messages:
 
@@ -63,6 +79,18 @@ class Form:
         if color:
             self.color = color
 
+    def to_json(self) -> str:
+        """Convert the Form to a JSON string."""
+        return json.dumps({
+            "type": self.__class__.__name__,
+            "color": self.color
+        })
+
+    @staticmethod
+    def from_json(cls, json_str: str) -> 'Form':
+        raise NotImplementedError(
+            "Subclasses must implement from_json method.")
+
 
 class Circle(Form):
     def __init__(self, color, center: Point2D, radius: float = 0, fill: bool = False):
@@ -70,6 +98,23 @@ class Circle(Form):
         self.center = center
         self.radius = radius
         self.fill = fill
+
+    def to_json(self):
+        """Convert the Circle to a JSON string."""
+        return json.dumps({
+            "type": "Circle",
+            "color": self.color,
+            "center": {"x": self.center[0], "y": self.center[1]},
+            "radius": self.radius,
+            "fill": self.fill
+        })
+
+    @staticmethod
+    def from_json(json_str: str) -> 'Circle':
+        """Create a Circle from a JSON string."""
+        data = json.loads(json_str)
+        center = Point2Da(data["center"]["x"], data["center"]["y"])
+        return Circle(color=data["color"], center=center, radius=data["radius"], fill=data.get("fill", False))
 
 
 class Polygon(Form):
@@ -81,27 +126,58 @@ class Polygon(Form):
     def num_points(self):
         return len(self.points)
 
+    def to_json(self):
+        """Convert the Polygon to a JSON string."""
+        return json.dumps({
+            "type": "Polygon",
+            "color": self.color,
+            "points": [{"x": p[0], "y": p[1]} for p in self.points]
+        })
+
+    @staticmethod
+    def from_json(json_str: str) -> 'Polygon':
+        """Create a Polygon from a JSON string."""
+        data = json.loads(json_str)
+        points = [Point2Da(p["x"], p["y"]) for p in data["points"]]
+        return Polygon(color=data["color"], points=points)
+
 
 class Text(Form):
     def __init__(self, color, position: Point2D, text: str, size: int = 36):
         super().__init__(color)
-        self.position = position
+        self.position: Point2Da = position
         self.text = text
         self.size = size
+
+    def to_json(self):
+        return json.dumps({
+            "type": "Text",
+            "color": self.color,
+            "position": self.position.to_json(),
+            "text": self.text,
+            "size": self.size
+        })
+
+    @staticmethod
+    def from_json(json_str: str) -> 'Text':
+        """Create a Text from a JSON string."""
+        data = json.loads(json_str)
+        position = Point2Da.from_json(data["position"])
+        return Text(color=data["color"], position=position, text=data["text"], size=data["size"])
 
 
 class Playfield:
     def __init__(self, width, height):
         self.width = width
         self.height = height
-        self._forms = {}
+        self._forms: Dict[int, Form | None] = {}
 
     def clear(self):
         for id in self._forms:
             self._forms[id] = None
 
     def put_form(self, id: int, form: Form):
-        self._forms[id] = form
+        self._forms[int(id)] = form
 
     def add_form(self, id: int, form: Form):
         if id in self._forms:
@@ -127,3 +203,104 @@ class Playfield:
 
     def __repr__(self):
         return f"playfield({self.width}, {self.height})"
+
+    def to_json(self) -> str:
+        """Convert the Playfield to a JSON string."""
+        forms_json = {id: form.to_json()
+                      for id, form in self._forms.items()}
+        return json.dumps({
+            "width": self.width,
+            "height": self.height,
+            "forms": forms_json
+        })
+
+    @staticmethod
+    def from_json(json_str: str) -> 'Playfield':
+        """Create a Playfield from a JSON string."""
+        data = json.loads(json_str)
+        playfield = Playfield(data["width"], data["height"])
+        for id, form_json in data["forms"].items():
+            if form_json["type"] == "Circle":
+                form = Circle.from_json(form_json)
+            elif form_json["type"] == "Polygon":
+                form = Polygon.from_json(form_json)
+            elif form_json["type"] == "Text":
+                form = Text.from_json(form_json)
+            else:
+                raise ValueError(f"Unknown form type: {form_json['type']}")
+            playfield.put_form(int(id), form)
+        return playfield
+
+    def render(self) -> np.ndarray:
+        """
+        Render the playfield to an image with all forms drawn.
+        """
+        # Create a blank image (black background)
+        image = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+
+        for form in self._forms.values():
+            if form is None:
+                continue
+
+            if isinstance(form, Circle):
+                center = (int(form.center[0]), int(form.center[1]))
+                radius = int(form.radius)
+                color = tuple(map(int, form.color))
+                thickness = -1 if form.fill else 2
+                cv2.circle(image, center, radius, color, thickness)
+
+            elif isinstance(form, Polygon):
+                pts = np.array([[int(p[0]), int(p[1])]
+                                for p in form.points], dtype=np.int32)
+                pts = pts.reshape((-1, 1, 2))
+                color = tuple(map(int, form.color))
+                cv2.polylines(image, [pts], isClosed=True,
+                              color=color, thickness=2)
+
+            elif isinstance(form, Text):
+                position = (int(form.position[0]), int(form.position[1]))
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = form.size / 36  # Scale relative to default
+                color = tuple(map(int, form.color))
+                thickness = 1
+                cv2.putText(image, form.text, position, font, font_scale,
+                            color, thickness, lineType=cv2.LINE_AA)
+
+            else:
+                raise ValueError(
+                    f"Unknown form type during rendering: {type(form)}")
+
+        return image
+
+    def transform(self, transformer: HomographyTransformer, width, height) -> Playfield:
+        """
+        Apply a transformation to all forms in the playfield.
+        """
+
+        pf = Playfield(width, height)
+
+        for id, form in self._forms.items():
+            if isinstance(form, Circle):
+                pf.put_form(id, Circle(
+                    color=form.color,
+                    center=transformer.map_point(form.center),
+                    radius=form.radius,
+                    fill=form.fill
+                ))
+            elif isinstance(form, Polygon):
+                pf.put_form(id, Polygon(
+                    color=form.color,
+                    points=[transformer.map_point(p) for p in form.points]
+                ))
+            elif isinstance(form, Text):
+                pf.put_form(id, Text(
+                    color=form.color,
+                    position=transformer.map_point(form.position),
+                    text=form.text,
+                    size=form.size
+                ))
+            else:
+                raise ValueError(f"Unknown form type: {type(form)}")
+            # Other forms can be added here as needed
+
+        return pf
