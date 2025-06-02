@@ -1,5 +1,7 @@
 import numpy as np
 
+from .datastructures import Point2Da
+
 
 class HomographyTransformer:
     """
@@ -73,6 +75,22 @@ class HomographyTransformer:
         hom_pts = np.hstack([pts, ones]) @ self.H.T
         hom_pts = hom_pts / hom_pts[:, 2][:, None]
         return hom_pts[:, :2]
+
+    def map_object(self, obj):
+        """
+        Apply homography to an object with a 'points' attribute.
+        The points should be a list of [x, y] pairs.
+        Returns a new object with transformed points.
+        """
+        if obj is None:
+            return None
+        elif isinstance(obj, list):
+            for item in obj:
+                item = self.map_object(item)
+        elif isinstance(obj, Point2Da):
+            return Point2Da(*self.map_point([obj.x, obj.y]))
+
+        return obj
 
     def __str__(self):
         return f"HomographyTransformer(src_points={self.src}, dst_points={self.dst})"
