@@ -6,8 +6,6 @@ from typing import Dict, List
 
 import cv2
 import numpy as np
-from numpy import float64
-from numpy.typing import NDArray
 
 from ..geometry import Point2Da
 from ..transformer import HomographyTransformer
@@ -250,7 +248,7 @@ class Playfield:
 
         return image
 
-    def transform(self, transformer: HomographyTransformer, pf) -> Playfield:
+    def transform(self, transformer: HomographyTransformer, dest_pf: Playfield) -> Playfield:
         """
         Apply a transformation to all forms in the playfield.
         """
@@ -259,19 +257,19 @@ class Playfield:
             if form is None:
                 continue
             elif isinstance(form, Circle):
-                pf.put_form(id, Circle(
+                dest_pf.put_form(id, Circle(
                     color=form.color,
                     center=transformer.map_point(form.center),
                     radius=form.radius,
                     fill=form.fill
                 ))
             elif isinstance(form, Polygon):
-                pf.put_form(id, Polygon(
+                dest_pf.put_form(id, Polygon(
                     color=form.color,
                     points=[transformer.map_point(p) for p in form.points]
                 ))
             elif isinstance(form, Text):
-                pf.put_form(id, Text(
+                dest_pf.put_form(id, Text(
                     color=form.color,
                     position=transformer.map_point(form.position),
                     text=form.text,
@@ -281,4 +279,4 @@ class Playfield:
                 raise ValueError(f"Unknown form type: {type(form)}")
             # Other forms can be added here as needed
 
-        return pf
+        return dest_pf
