@@ -6,13 +6,10 @@ from typing import Any, Dict, List
 import paho.mqtt.client as mqtt
 from paho.mqtt.client import MQTTMessage
 
-from ..datastructures import Circle, Messages, Playfield, Polygon, Text
-
 
 class MqttHandler:
     def __init__(self, broker: str, port: int, topic: str, username, password):
         self.topic = topic
-        self._last_messages = Messages()
         self._connected = False
 
         self.client = mqtt.Client()

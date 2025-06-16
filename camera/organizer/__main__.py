@@ -342,6 +342,11 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
                 pf.put_form(
                     10, None)
 
+            if mqtt.get_message() == "next":
+                want_to_next_step = True
+            if mqtt.get_message() == "back":
+                want_to_last_step = True
+
             if want_to_next_step and not hand_in_danger:
                 stepper.next_step()
                 print(f"Next step: {stepper.get_current_step()}")
