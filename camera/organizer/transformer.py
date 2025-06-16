@@ -63,7 +63,8 @@ class HomographyTransformer:
         x_h, y_h, w_h = self.H.dot(vec)
         if np.isclose(w_h, 0):
             raise ValueError("Mapping resulted in infinite point (w≈0)")
-        return np.array([x_h / w_h, y_h / w_h])
+        point = np.array([x_h / w_h, y_h / w_h])
+        return Point2Da(point[0], point[1])
 
     def map_batch(self, points):
         """
@@ -82,13 +83,19 @@ class HomographyTransformer:
         The points should be a list of [x, y] pairs.
         Returns a new object with transformed points.
         """
+        # print("Mapping object with HomographyTransformer...")
         if obj is None:
+            print("Warning: None object passed to map_object. Returning None.")
             return None
         elif isinstance(obj, list):
-            for item in obj:
-                item = self.map_object(item)
+            return [self.map_object(item) for item in obj]
         elif isinstance(obj, Point2Da):
-            return Point2Da(*self.map_point([obj.x, obj.y]))
+            mapped_point = self.map_point([obj.x, obj.y])
+            return Point2Da(mapped_point.x, mapped_point.y)
+        else:
+            print(
+                f"Warning: Unsupported object type {type(obj)} for mapping. Returning original object.")
+            return obj
 
         return obj
 

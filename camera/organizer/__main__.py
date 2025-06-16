@@ -5,16 +5,77 @@ from time import sleep
 
 import cv2
 import numpy as np
+import requests
 from dotenv import load_dotenv
 
 from .calibrator import calibrate_projector
 from .camera import Camera
 from .camera.calibrate import calibrate_camera
-from .datastructures import Circle, Playfield, Point2Da, Polygon
+from .datastructures import Circle, Form, Playfield, Point2Da, Polygon
 from .hand_tracker import HandTracker
 from .mqtt_handler import MqttHandler
 from .pcb_tracker import FrameProcessor as PCB_FrameProcessor
 from .transformer import HomographyTransformer
+
+
+class PCB_Manager:
+    """
+    A class to manage PCB object placement
+    """
+
+    def __init__(self):
+        self._steps = [
+            None,  # Step 0: Initial state
+            Polygon((255, 255, 255), [Point2Da(85, 50), Point2Da(
+                85, 85), Point2Da(120, 85), Point2Da(120, 50)]),
+            Circle((255, 255, 255), Point2Da(160, 35), 10),
+            None,
+        ]
+
+        self._current_step = 0
+
+    def get_current_step(self) -> Form | None:
+        """
+        Get the current step in the PCB placement process.
+        :return: The current step as a Form object or None if no step is set.
+        """
+        return self._steps[self._current_step]
+
+    def get_step(self, step: int) -> Form | None:
+        if 0 <= step < len(self._steps):
+            return self._steps[step]
+        return None
+
+    def next_step(self) -> None:
+        """
+        Move to the next step in the PCB placement process.
+        """
+        if self._current_step < len(self._steps) - 1:
+            self._current_step += 1
+
+
+class Schublade:
+    """
+    A class to represent a drawer with a name and an ID.
+    """
+
+    def __init__(self, id: int, url: str):
+        self.id = id
+        self.url = url
+        self._state = False
+
+    def set_state(self, state: bool):
+        """
+        Set the state of the drawer.
+        :param state: True if the drawer is open, False if closed.
+        """
+        if state != self._state:
+            self._state = state
+            requests.get(
+                self.url + f"move?servo={self.id}&place={170 if state else 10}")
+
+    def __repr__(self):
+        return f"Schublade(name={self.name}, id={self.id})"
 
 
 def load_transformer(source_points_file: str, target_points_file: str) -> HomographyTransformer:
@@ -70,7 +131,7 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
     pf = Playfield(1200, 600)
 
-    pcb_pf = Playfield(297, 210)  # A4 size in mm
+    pcb_pf = Playfield(210, 115)  # A4 size in mm
     # pcb_tl: Point2Da | None = Point2Da(400, 400)
     # pcb_tr: Point2Da | None = Point2Da(600, 400)
     # pcb_bl: Point2Da | None = Point2Da(400, 600)
@@ -79,6 +140,14 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
     pcb_tr: Point2Da | None = None
     pcb_bl: Point2Da | None = None
     pcb_br: Point2Da | None = None
+
+    s0 = Schublade(0, "http://172.16.1.145/")
+    s1 = Schublade(1, "http://172.16.1.145/")
+    s2 = Schublade(2, "http://172.16.1.145/")
+
+    stepper = PCB_Manager()
+    stepper.next_step()  # Move to the first step
+    stepper.next_step()  # Move to the second step
 
     projector_pf = Playfield(os.getenv("PROJECTOR_WIDTH"),
                              os.getenv("PROJECTOR_HEIGHT"))
@@ -93,9 +162,24 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
     # print(pf_to_pixel.map_point(Point2Da(100, 200)))
 
+    # print(cam_to_pf.map_point(Point2Da(640, 402)))
+
+    print("PF to Pixel Transformer:")
+    print(pf_to_pixel.map_point(Point2Da(800, 500)))
+
+    # s0.set_state(True)
+    # sleep(1)
+    # s0.set_state(False)
+    # s1.set_state(True)
+    # sleep(1)
+    # s1.set_state(False)
+    # s2.set_state(True)
+    # sleep(1)
+    # s2.set_state(False)
+
     try:
         camera = Camera(camera_id, width, height, rotate)
-        image = cv2.resize(cv2.imread("testimg.png"), [800, 600])
+        # image = cv2.resize(cv2.imread("testimg.png"), [800, 600])
         ht = HandTracker()
         while True:
             pf.clear()
@@ -109,53 +193,65 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
                 ids = list(cp.codes.keys())
                 ids.sort()
                 if all(x in ids for x in [10, 11, 12, 13]):
-                    print("Found PCB corners")
-                    pcb_tl = cp.codes[10].center
-                    pcb_tr = cp.codes[11].center
-                    pcb_bl = cp.codes[12].center
-                    pcb_br = cp.codes[13].center
-                    print(
-                        f"PCB corners: {pcb_tl}, {pcb_tr}, {pcb_bl}, {pcb_br}")
-                    print(
-                        f"PCB Type: {type(pcb_tl)} {type(pcb_tr)} {type(pcb_bl)} {type(pcb_br)}")
+                    # print("Found PCB corners")
+                    pcb_tl = cam_to_pf.map_point(cp.codes[11].center)
+                    pcb_tr = cam_to_pf.map_point(cp.codes[10].center)
+                    pcb_bl = cam_to_pf.map_point(cp.codes[12].center)
+                    pcb_br = cam_to_pf.map_point(cp.codes[13].center)
+                    # print(
+                    #     f"PCB corners: {pcb_tl}, {pcb_tr}, {pcb_bl}, {pcb_br}")
+                    # print(
+                    #     f"PCB Type: {type(pcb_tl)} {type(pcb_tr)} {type(pcb_bl)} {type(pcb_br)}")
 
                 if all(x in ids for x in [20, 21, 22, 23]):
-                    pcb_tl = cp.codes[20]
-                    pcb_tr = cp.codes[21]
-                    pcb_bl = cp.codes[22]
-                    pcb_br = cp.codes[23]
-
-                # pf.put_form(
-                #     1,
-                #     Circle(
-                #         center=cam_to_pf.map_point(cp.center),
-                #         radius=50,
-                #         color=(255, 255, 0),
-                #         fill=True
-                #     )
-                # )
+                    pcb_tl = cam_to_pf.map_point(cp.codes[20])
+                    pcb_tr = cam_to_pf.map_point(cp.codes[21])
+                    pcb_bl = cam_to_pf.map_point(cp.codes[22])
+                    pcb_br = cam_to_pf.map_point(cp.codes[23])
 
             hands = ht.detect_hands(frame)
-            mapped_hands = cam_to_pf.map_object(ht.get_hand_positions())
-            for nrh, hand in enumerate(mapped_hands):
-                if len(hand) < 4:
-                    continue
-                id = 100 * (nrh + 1)
+            handpos = ht.get_hand_positions()
+            # mapped_hands = cam_to_pf.map_object(handpos)
 
-                for i, point in enumerate(hand):
-                    # Convert hand points to playfield coordinates
-                    pf.put_form(
-                        id + i,
-                        Circle(
-                            center=Point2Da(point.x, point.y),
-                            radius=10,
-                            color=(0, 255, 0)
-                        )
-                    )
+            # for nrh, hand in enumerate(mapped_hands):
+            #     if len(hand) < 4:
+            #         continue
+            #     id = 100 * (nrh + 1)
+
+            #     for i, point in enumerate(hand):
+            #         # Convert hand points to playfield coordinates
+            #         pf.put_form(
+            #             id + i,
+            #             Circle(
+            #                 center=point,
+            #                 radius=10,
+            #                 color=(0, 255, 0)
+            #             )
+            #         )
+
+            # DEBUG POINT
+            # pf.put_form(
+            #     10000, Circle(
+            #         center=Point2Da(800, 500),
+            #         radius=10,
+            #         color=(255, 0, 0)
+            #     )
+            # )
+
+            # pf.put_form(
+            #     10001, Circle(
+            #         center=cam_to_pf.map_point(Point2Da(485, 385)),
+            #         radius=10,
+            #         color=(255, 255, 0)
+            #     )
+            # )
 
             # If all PCB corners are detected, draw the PCB
             if type(pcb_tl) is Point2Da and type(pcb_tr) is Point2Da and \
                     type(pcb_bl) is Point2Da and type(pcb_br) is Point2Da:
+
+                # print(f"PCB corners: {pcb_tl}, {pcb_tr}, {pcb_bl}, {pcb_br}")
+
                 tr = HomographyTransformer(
                     [Point2Da(0, 0),
                      Point2Da(pcb_pf.width, 0),
@@ -164,26 +260,30 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
                     [pcb_tl, pcb_tr, pcb_bl, pcb_br],
                 )
                 pcb_pf.clear()
+                # pcb_pf.put_form(
+                #     5000, Polygon(
+                #         points=[
+                #             Point2Da(0, 0),
+                #             Point2Da(0, pcb_pf.height),
+                #             Point2Da(pcb_pf.width, 0),
+                #             Point2Da(pcb_pf.width, pcb_pf.height)
+                #         ],
+                #         color=(0, 0, 255),
+                #     ))
+                # pcb_pf.put_form(
+                #     5001, Polygon(
+                #         points=[
+                #             Point2Da(0, 0),
+                #             Point2Da(pcb_pf.width, 0),
+                #             Point2Da(pcb_pf.width, pcb_pf.height),
+                #             Point2Da(0, pcb_pf.height),
+                #         ],
+                #         color=(0, 255, 255),
+                #     ))
+
                 pcb_pf.put_form(
-                    5000, Polygon(
-                        points=[
-                            Point2Da(0, 0),
-                            Point2Da(0, 210),
-                            Point2Da(297, 0),
-                            Point2Da(297, 210)
-                        ],
-                        color=(0, 0, 255),
-                    ))
-                pcb_pf.put_form(
-                    5001, Polygon(
-                        points=[
-                            Point2Da(0, 0),
-                            Point2Da(297, 0),
-                            Point2Da(297, 210),
-                            Point2Da(0, 210),
-                        ],
-                        color=(0, 255, 255),
-                    ))
+                    5005, stepper.get_current_step())
+                # print(pcb_pf._forms)
                 pcb_pf.transform(tr, pf)
 
             # cv2.imshow('Codes', frame)
@@ -192,7 +292,8 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
                          projector_pf)
 
             cv2.imshow('Playfield', pf.render())
-            cv2.imshow('Projector', projector_pf.render())
+            cv2.imshow('Projector', projector_pf.render(
+                offset=Point2Da(0, 0)))
             cv2.imshow('PCB', cp.get_marked_frame())
             cv2.imshow('Hands', hands)
             cv2.imshow('PCB_PF', pcb_pf.render())

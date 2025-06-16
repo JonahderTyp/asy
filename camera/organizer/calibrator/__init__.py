@@ -45,7 +45,7 @@ def calibrate_projector(mqtt: MqttHandler, cal_file: str = "cal_projector.json")
         if key == 'q' or key == readchar.key.ESC:
             print("Exit key pressed. Goodbye!")
             ppf.clear()
-            mqtt.send(ppf)
+            mqtt.send(ppf.to_json())
             sleep(1)
             break
 
@@ -55,7 +55,7 @@ def calibrate_projector(mqtt: MqttHandler, cal_file: str = "cal_projector.json")
             with open("cal_projector.json", "w") as f:
                 f.write(json.dumps(data, indent=4))
             ppf.clear()
-            mqtt.send(ppf)
+            mqtt.send(ppf.to_json())
             sleep(1)
             break
 
@@ -90,4 +90,4 @@ def calibrate_projector(mqtt: MqttHandler, cal_file: str = "cal_projector.json")
             ppf.put_form(i*10+1, t)
             ppf.put_form(i*10, c)
 
-        mqtt.send(ppf)
+        mqtt.send(ppf.to_json())

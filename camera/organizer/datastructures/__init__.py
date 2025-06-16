@@ -106,6 +106,13 @@ class Polygon(Form):
         points = [Point2Da(p["x"], p["y"]) for p in data["points"]]
         return Polygon(color=data["color"], points=points)
 
+    def __str__(self):
+        points_str = ', '.join(f"({p.x}, {p.y})" for p in self.points)
+        return f"Polygon(points=[{points_str}], color={self.color})"
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class Text(Form):
     def __init__(self, color, position: Point2Da, text: str, size: int = 36):
