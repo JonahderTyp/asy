@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from .calibrator import calibrate_projector
 from .camera import Camera
 from .camera.calibrate import calibrate_camera
-from .datastructures import Circle, Form, Playfield, Point2Da, Polygon
+from .datastructures import Circle, Form, Playfield, Point2Da, Polygon, Text
 from .hand_tracker import HandTracker
 from .mqtt_handler import MqttHandler
 from .pcb_tracker import FrameProcessor as PCB_FrameProcessor
@@ -28,8 +28,8 @@ class PCB_Manager:
             None,  # Step 0: Initial state
             Polygon((255, 255, 255), [Point2Da(85, 50), Point2Da(
                 85, 85), Point2Da(120, 85), Point2Da(120, 50)]),
-            Circle((255, 255, 255), Point2Da(160, 35), 10),
-            None,
+            Circle((255, 255, 255), Point2Da(160, 35), 5),
+            Circle((255, 255, 255), Point2Da(160, 105), 5),
         ]
 
         self._current_step = 0
@@ -48,10 +48,15 @@ class PCB_Manager:
 
     def next_step(self) -> None:
         """
-        Move to the next step in the PCB placement process.
+        Move to the next step in the PCB placement process. Go back to the first step if at the last step.
         """
-        if self._current_step < len(self._steps) - 1:
-            self._current_step += 1
+        self._current_step = (self._current_step + 1) % len(self._steps)
+
+    def back_step(self) -> None:
+        """
+        Move to the previous step in the PCB placement process. Go to the last step if at the first step.
+        """
+        self._current_step = (self._current_step - 1) % len(self._steps)
 
 
 class Schublade:
@@ -62,7 +67,8 @@ class Schublade:
     def __init__(self, id: int, url: str):
         self.id = id
         self.url = url
-        self._state = False
+        self._state = None  # None means unknown, True means open, False means closed
+        self.set_state(False)  # Initialize the drawer to closed state
 
     def set_state(self, state: bool):
         """
@@ -71,8 +77,12 @@ class Schublade:
         """
         if state != self._state:
             self._state = state
-            requests.get(
-                self.url + f"move?servo={self.id}&place={170 if state else 10}")
+
+            try:
+                requests.get(
+                    self.url + f"move?servo={self.id}&place={170 if state else 10}")
+            except requests.RequestException as e:
+                print(f"Error setting state for drawer {self.id}: {e}")
 
     def __repr__(self):
         return f"Schublade(name={self.name}, id={self.id})"
@@ -146,8 +156,6 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
     s2 = Schublade(2, "http://172.16.1.145/")
 
     stepper = PCB_Manager()
-    stepper.next_step()  # Move to the first step
-    stepper.next_step()  # Move to the second step
 
     projector_pf = Playfield(os.getenv("PROJECTOR_WIDTH"),
                              os.getenv("PROJECTOR_HEIGHT"))
@@ -167,15 +175,8 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
     print("PF to Pixel Transformer:")
     print(pf_to_pixel.map_point(Point2Da(800, 500)))
 
-    # s0.set_state(True)
-    # sleep(1)
-    # s0.set_state(False)
-    # s1.set_state(True)
-    # sleep(1)
-    # s1.set_state(False)
-    # s2.set_state(True)
-    # sleep(1)
-    # s2.set_state(False)
+    last_hand_in_zone_1 = None
+    last_hand_in_zone_2 = None
 
     try:
         camera = Camera(camera_id, width, height, rotate)
@@ -183,10 +184,39 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
         ht = HandTracker()
         while True:
             pf.clear()
+
+            # Clear Framebuffers
+            for _ in range(0):
+                camera.get_frame()
+
             frame = camera.get_frame()
             # frame = image.copy()
 
             cp = PCB_FrameProcessor(frame)
+
+            hand_in_danger = False
+            want_to_next_step = False
+            want_to_last_step = False
+            hand_in_zone_1 = False
+            hand_in_zone_2 = False
+
+            match stepper._current_step:
+                case 1:
+                    s0.set_state(True)
+                    s1.set_state(False)
+                    s2.set_state(False)
+                case 2:
+                    s0.set_state(False)
+                    s1.set_state(True)
+                    s2.set_state(False)
+                case 3:
+                    s0.set_state(False)
+                    s1.set_state(False)
+                    s2.set_state(True)
+                case _:
+                    s0.set_state(False)
+                    s1.set_state(False)
+                    s2.set_state(False)
 
             if True:
                 # print(cp.codes)
@@ -211,47 +241,69 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
             hands = ht.detect_hands(frame)
             handpos = ht.get_hand_positions()
-            # mapped_hands = cam_to_pf.map_object(handpos)
+            mapped_hands = cam_to_pf.map_object(handpos)
+            for nrh, hand in enumerate(mapped_hands):
+                if len(hand) < 4:
+                    continue
+                point: Point2Da
+                for i, point in enumerate(hand):
 
-            # for nrh, hand in enumerate(mapped_hands):
-            #     if len(hand) < 4:
-            #         continue
-            #     id = 100 * (nrh + 1)
+                    if point.y < 200 and point.x < 800 and point.x > 400:
+                        hand_in_danger = True
 
-            #     for i, point in enumerate(hand):
-            #         # Convert hand points to playfield coordinates
-            #         pf.put_form(
-            #             id + i,
-            #             Circle(
-            #                 center=point,
-            #                 radius=10,
-            #                 color=(0, 255, 0)
-            #             )
-            #         )
+                    if point.y > 50 and point.y < 100 \
+                            and point.x > 1000 and point.x < 1050:
+                        hand_in_zone_1 = True
 
-            # DEBUG POINT
-            # pf.put_form(
-            #     10000, Circle(
-            #         center=Point2Da(800, 500),
-            #         radius=10,
-            #         color=(255, 0, 0)
-            #     )
-            # )
+                    if point.y > 50 and point.y < 100 \
+                            and point.x > 900 and point.x < 950:
+                        hand_in_zone_2 = True
 
-            # pf.put_form(
-            #     10001, Circle(
-            #         center=cam_to_pf.map_point(Point2Da(485, 385)),
-            #         radius=10,
-            #         color=(255, 255, 0)
-            #     )
-            # )
+            pf.put_form(
+                11, Polygon(
+                    color=(0, 255, 255),
+                    points=[
+                        Point2Da(900, 50),
+                        Point2Da(950, 50),
+                        Point2Da(950, 100),
+                        Point2Da(900, 100),
+                    ]
+                )
+            )
+
+            pf.put_form(
+                12, Text(
+                    color=(0, 255, 255),
+                    text="Back",
+                    position=Point2Da(905, 75),
+                    size=12
+                )
+            )
+
+            pf.put_form(
+                13, Polygon(
+                    color=(0, 255, 0),
+                    points=[
+                        Point2Da(1000, 50),
+                        Point2Da(1050, 50),
+                        Point2Da(1050, 100),
+                        Point2Da(1000, 100),
+                    ]
+                )
+            )
+
+            pf.put_form(
+                14, Text(
+                    color=(0, 255, 0),
+                    text="Weiter",
+                    position=Point2Da(1005, 75),
+                    size=12
+                )
+            )
 
             # If all PCB corners are detected, draw the PCB
             if type(pcb_tl) is Point2Da and type(pcb_tr) is Point2Da and \
                     type(pcb_bl) is Point2Da and type(pcb_br) is Point2Da:
-
-                # print(f"PCB corners: {pcb_tl}, {pcb_tr}, {pcb_bl}, {pcb_br}")
-
                 tr = HomographyTransformer(
                     [Point2Da(0, 0),
                      Point2Da(pcb_pf.width, 0),
@@ -259,28 +311,8 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
                      Point2Da(pcb_pf.width, pcb_pf.height)],
                     [pcb_tl, pcb_tr, pcb_bl, pcb_br],
                 )
-                pcb_pf.clear()
-                # pcb_pf.put_form(
-                #     5000, Polygon(
-                #         points=[
-                #             Point2Da(0, 0),
-                #             Point2Da(0, pcb_pf.height),
-                #             Point2Da(pcb_pf.width, 0),
-                #             Point2Da(pcb_pf.width, pcb_pf.height)
-                #         ],
-                #         color=(0, 0, 255),
-                #     ))
-                # pcb_pf.put_form(
-                #     5001, Polygon(
-                #         points=[
-                #             Point2Da(0, 0),
-                #             Point2Da(pcb_pf.width, 0),
-                #             Point2Da(pcb_pf.width, pcb_pf.height),
-                #             Point2Da(0, pcb_pf.height),
-                #         ],
-                #         color=(0, 255, 255),
-                #     ))
 
+                pcb_pf.clear()
                 pcb_pf.put_form(
                     5005, stepper.get_current_step())
                 # print(pcb_pf._forms)
@@ -288,6 +320,41 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
             # cv2.imshow('Codes', frame)
 
+            if hand_in_zone_1 != last_hand_in_zone_1 and hand_in_zone_1:
+                want_to_next_step = True
+
+            if hand_in_zone_2 != last_hand_in_zone_2 and hand_in_zone_2:
+                want_to_last_step = True
+
+            if hand_in_danger and (hand_in_zone_1 or hand_in_zone_2):
+                pf.put_form(
+                    10, Polygon(
+                        color=(0, 0, 255),
+                        points=[
+                            Point2Da(400, 0),
+                            Point2Da(400, 200),
+                            Point2Da(800, 200),
+                            Point2Da(800, 0),
+                        ]
+                    )
+                )
+            else:
+                pf.put_form(
+                    10, None)
+
+            if want_to_next_step and not hand_in_danger:
+                stepper.next_step()
+                print(f"Next step: {stepper.get_current_step()}")
+                want_to_next_step = False
+
+            if want_to_last_step and not hand_in_danger:
+                stepper.back_step()
+                want_to_last_step = False
+
+            last_hand_in_zone_1 = hand_in_zone_1
+            last_hand_in_zone_2 = hand_in_zone_2
+
+            projector_pf.clear()
             pf.transform(pf_to_pixel,
                          projector_pf)
 
@@ -308,6 +375,8 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
     #     print(f"Error: {e}")
     except KeyboardInterrupt:
         print("Exiting...")
+        projector_pf.clear()
+        mqtt.send(projector_pf.to_json())
     finally:
         camera.cap.release()
         cv2.destroyAllWindows()

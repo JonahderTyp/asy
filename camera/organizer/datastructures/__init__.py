@@ -178,7 +178,7 @@ class Playfield:
 
     def to_json(self) -> str:
         """Convert the Playfield to a JSON string."""
-        forms_json = {id: form.to_json()
+        forms_json = {id: form.to_json() if form is not None else None
                       for id, form in self._forms.items()}
         return json.dumps({
             "width": self.width,
