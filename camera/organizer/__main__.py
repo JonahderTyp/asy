@@ -68,7 +68,7 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
     Main function to capture and process camera frames.
     """
 
-    pf = Playfield(1000, 500)
+    pf = Playfield(1200, 600)
 
     pcb_pf = Playfield(297, 210)  # A4 size in mm
     # pcb_tl: Point2Da | None = Point2Da(400, 400)
@@ -104,7 +104,7 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
             cp = PCB_FrameProcessor(frame)
 
-            if cp.center is not None:
+            if True:
                 # print(cp.codes)
                 ids = list(cp.codes.keys())
                 ids.sort()
@@ -125,15 +125,15 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
                     pcb_bl = cp.codes[22]
                     pcb_br = cp.codes[23]
 
-                pf.put_form(
-                    1,
-                    Circle(
-                        center=cam_to_pf.map_point(cp.center),
-                        radius=50,
-                        color=(255, 255, 0),
-                        fill=True
-                    )
-                )
+                # pf.put_form(
+                #     1,
+                #     Circle(
+                #         center=cam_to_pf.map_point(cp.center),
+                #         radius=50,
+                #         color=(255, 255, 0),
+                #         fill=True
+                #     )
+                # )
 
             hands = ht.detect_hands(frame)
             mapped_hands = cam_to_pf.map_object(ht.get_hand_positions())
@@ -198,7 +198,7 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
             cv2.imshow('PCB_PF', pcb_pf.render())
 
             # Sende pf per MQTT
-            # mqtt.send(projector_pf.to_json())
+            mqtt.send(projector_pf.to_json())
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break

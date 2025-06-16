@@ -257,9 +257,10 @@ class Playfield:
             if form is None:
                 continue
             elif isinstance(form, Circle):
+                center = transformer.map_point(form.center)
                 dest_pf.put_form(id, Circle(
                     color=form.color,
-                    center=transformer.map_point(form.center),
+                    center=Point2Da(center[0], center[1]),
                     radius=form.radius,
                     fill=form.fill
                 ))

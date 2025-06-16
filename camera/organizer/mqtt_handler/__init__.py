@@ -34,44 +34,8 @@ class MqttHandler:
         else:
             print(f"MQTT connect failed (code {rc})")
 
-    def send(self, pf: Playfield):
-        for id, form in pf.get_forms().items():
-            if isinstance(form, Circle):
-                payload = {
-                    "id": id,
-                    "type": "circle",
-                    "x": form.center.x,
-                    "y": form.center.y,
-                    "radius": form.radius,
-                    "color": form.color,
-                }
-            elif isinstance(form, Polygon):
-                payload = {
-                    "id": id,
-                    "type": "polygon",
-                    "points": [{"x": p.x, "y": p.y} for p in form.points],
-                    "color": form.color,
-                }
-            elif isinstance(form, Text):
-                payload = {
-                    "id": id,
-                    "type": "text",
-                    "x": form.position.x,
-                    "y": form.position.y,
-                    "text": form.text,
-                    "size": form.size,
-                    "color": form.color,
-                }
-            elif form is None:
-                payload = {
-                    "id": id,
-                }
-            else:
-                raise ValueError(
-                    f"Unsupported form type {type(form)} for id {id}")
-
-            self.client.publish(self.topic, json.dumps(payload))
-            self._last_messages.add_message(form, id)
+    def send(self, payload: str):
+        self.client.publish(self.topic, payload)
 
     def disconnect(self):
         self.client.loop_stop()

@@ -39,7 +39,8 @@ def find_codes(
             # Get the center of the marker
             corner = corners[i][0]
             center = corner.mean(axis=0)
-            code = Code(ids[i][0], center.astype(int))
+            center = Point2Da(center[0], center[1])
+            code = Code(ids[i][0], center)
             codes[code.id] = code
 
     return codes
