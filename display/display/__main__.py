@@ -1,12 +1,17 @@
 # __main__.py
+import json
 import os
 import sys
 
+import cv2
 import pygame
 from dotenv import load_dotenv
-from mqtt_handler import MqttHandler
 from pygame.locals import FULLSCREEN, KEYDOWN, QUIT, K_q
-from renderer import ScreenRenderer
+
+from .datastructures import Playfield
+from .geometry import Point2Da
+from .mqtt_handler import MqttHandler
+from .renderer import ScreenRenderer
 
 load_dotenv()
 
@@ -14,7 +19,7 @@ load_dotenv()
 # initialize pygame
 pygame.init()
 info = pygame.display.Info()
-screen = pygame.display.set_mode((800, 600))
+screen = pygame.display.set_mode((800, 600), FULLSCREEN)
 pygame.display.set_caption("MQTT Display")
 clock = pygame.time.Clock()
 
@@ -26,19 +31,32 @@ mqtt = MqttHandler(os.getenv("MQTT_BROKER"),
                    os.getenv("MQTT_PASSWORD"))
 renderer = ScreenRenderer(screen)
 
-running = True
-while running:
-    for ev in pygame.event.get():
-        if ev.type == QUIT or (ev.type == KEYDOWN and ev.key == K_q):
-            running = False
 
-    screen.fill((0, 0, 0))
-    # print(f"commands: {mqtt.draw_commands}")
-    renderer.render(mqtt.messages.get_all_messages())
-    pygame.display.flip()
-    clock.tick(30)
+ppf = Playfield(800, 600)
+running = True
+
+# Create a named window with fullscreen property
+cv2.namedWindow("Fullscreen", cv2.WND_PROP_FULLSCREEN)
+cv2.setWindowProperty(
+    "Fullscreen", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+
+while running:
+    ppf.clear()
+    try:
+        ppf.from_json(mqtt.last_message)
+    except json.JSONDecodeError:
+        print("Invalid JSON received from MQTT, skipping...")
+
+    cv2.imshow("Fullscreen", ppf.render(offset=Point2Da(0, 0)))
+
+    # Break on 'q' key press
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        running = False
+        break
 
 # clean up
 mqtt.disconnect()
+cv2.destroyAllWindows()
 pygame.quit()
 sys.exit()

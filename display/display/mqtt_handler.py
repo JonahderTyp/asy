@@ -3,14 +3,13 @@ import json
 from typing import Any, Dict, List
 
 import paho.mqtt.client as mqtt
-from message import Messages
 from paho.mqtt.client import MQTTMessage
 
 
 class MqttHandler:
     def __init__(self, broker: str, port: int, topic: str, username, password):
         self.topic = topic
-        self.messages = Messages()
+        self.last_message: str = ""
 
         self.client = mqtt.Client()
         self.client.tls_set()
@@ -43,17 +42,12 @@ class MqttHandler:
           {"type":"text","x":200,"y":50,"text":"hey","size":36,"color":[255,255,255]}
         """
         try:
-            cmd = json.loads(msg.payload.decode("utf-8"))
+            self.last_message = msg.payload.decode('utf-8')
         except json.JSONDecodeError:
             print("Invalid JSON:", msg.payload)
             return
 
         # print(f"Received command: {cmd}")
-
-        if "id" in cmd:
-            self.messages.add_message(cmd, cmd["id"])
-        else:
-            print("Ignored command (no id):", cmd)
 
     def disconnect(self):
         self.client.loop_stop()
