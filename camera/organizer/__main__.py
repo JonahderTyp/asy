@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from .calibrator import calibrate_projector
 from .camera import Camera
 from .camera.calibrate import calibrate_camera
-from .datastructures import Circle, Playfield, Point2Da
+from .datastructures import Circle, Playfield, Point2Da, Polygon
 from .hand_tracker import HandTracker
 from .mqtt_handler import MqttHandler
 from .pcb_tracker import FrameProcessor as PCB_FrameProcessor
@@ -70,6 +70,16 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
 
     pf = Playfield(1000, 500)
 
+    pcb_pf = Playfield(297, 210)  # A4 size in mm
+    # pcb_tl: Point2Da | None = Point2Da(400, 400)
+    # pcb_tr: Point2Da | None = Point2Da(600, 400)
+    # pcb_bl: Point2Da | None = Point2Da(400, 600)
+    # pcb_br: Point2Da | None = Point2Da(600, 800)
+    pcb_tl: Point2Da | None = None
+    pcb_tr: Point2Da | None = None
+    pcb_bl: Point2Da | None = None
+    pcb_br: Point2Da | None = None
+
     projector_pf = Playfield(os.getenv("PROJECTOR_WIDTH"),
                              os.getenv("PROJECTOR_HEIGHT"))
 
@@ -95,6 +105,26 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
             cp = PCB_FrameProcessor(frame)
 
             if cp.center is not None:
+                # print(cp.codes)
+                ids = list(cp.codes.keys())
+                ids.sort()
+                if all(x in ids for x in [10, 11, 12, 13]):
+                    print("Found PCB corners")
+                    pcb_tl = cp.codes[10].center
+                    pcb_tr = cp.codes[11].center
+                    pcb_bl = cp.codes[12].center
+                    pcb_br = cp.codes[13].center
+                    print(
+                        f"PCB corners: {pcb_tl}, {pcb_tr}, {pcb_bl}, {pcb_br}")
+                    print(
+                        f"PCB Type: {type(pcb_tl)} {type(pcb_tr)} {type(pcb_bl)} {type(pcb_br)}")
+
+                if all(x in ids for x in [20, 21, 22, 23]):
+                    pcb_tl = cp.codes[20]
+                    pcb_tr = cp.codes[21]
+                    pcb_bl = cp.codes[22]
+                    pcb_br = cp.codes[23]
+
                 pf.put_form(
                     1,
                     Circle(
@@ -123,6 +153,39 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
                         )
                     )
 
+            # If all PCB corners are detected, draw the PCB
+            if type(pcb_tl) is Point2Da and type(pcb_tr) is Point2Da and \
+                    type(pcb_bl) is Point2Da and type(pcb_br) is Point2Da:
+                tr = HomographyTransformer(
+                    [Point2Da(0, 0),
+                     Point2Da(pcb_pf.width, 0),
+                     Point2Da(0, pcb_pf.height),
+                     Point2Da(pcb_pf.width, pcb_pf.height)],
+                    [pcb_tl, pcb_tr, pcb_bl, pcb_br],
+                )
+                pcb_pf.clear()
+                pcb_pf.put_form(
+                    5000, Polygon(
+                        points=[
+                            Point2Da(0, 0),
+                            Point2Da(0, 210),
+                            Point2Da(297, 0),
+                            Point2Da(297, 210)
+                        ],
+                        color=(0, 0, 255),
+                    ))
+                pcb_pf.put_form(
+                    5001, Polygon(
+                        points=[
+                            Point2Da(0, 0),
+                            Point2Da(297, 0),
+                            Point2Da(297, 210),
+                            Point2Da(0, 210),
+                        ],
+                        color=(0, 255, 255),
+                    ))
+                pcb_pf.transform(tr, pf)
+
             # cv2.imshow('Codes', frame)
 
             pf.transform(pf_to_pixel,
@@ -132,6 +195,11 @@ def main(camera_id: int, width: int, height: int, rotate: bool = False) -> None:
             cv2.imshow('Projector', projector_pf.render())
             cv2.imshow('PCB', cp.get_marked_frame())
             cv2.imshow('Hands', hands)
+            cv2.imshow('PCB_PF', pcb_pf.render())
+
+            # Sende pf per MQTT
+            # mqtt.send(projector_pf.to_json())
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
