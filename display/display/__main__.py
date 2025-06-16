@@ -17,11 +17,11 @@ load_dotenv()
 
 
 # initialize pygame
-pygame.init()
-info = pygame.display.Info()
-screen = pygame.display.set_mode((800, 600), FULLSCREEN)
-pygame.display.set_caption("MQTT Display")
-clock = pygame.time.Clock()
+# pygame.init()
+# info = pygame.display.Info()
+# screen = pygame.display.set_mode((800, 600), FULLSCREEN)
+# pygame.display.set_caption("MQTT Display")
+# clock = pygame.time.Clock()
 
 # init MQTT & renderer
 mqtt = MqttHandler(os.getenv("MQTT_BROKER"),
@@ -29,10 +29,9 @@ mqtt = MqttHandler(os.getenv("MQTT_BROKER"),
                    os.getenv("MQTT_TOPIC"),
                    os.getenv("MQTT_USER"),
                    os.getenv("MQTT_PASSWORD"))
-renderer = ScreenRenderer(screen)
+# renderer = ScreenRenderer(screen)
 
 
-ppf = Playfield(800, 600)
 running = True
 
 # Create a named window with fullscreen property
@@ -42,13 +41,13 @@ cv2.setWindowProperty(
 
 
 while running:
-    ppf.clear()
-    try:
-        ppf.from_json(mqtt.last_message)
-    except json.JSONDecodeError:
-        print("Invalid JSON received from MQTT, skipping...")
+    # try:
+    ppf = Playfield.from_json(mqtt.last_message)
+    # except json.JSONDecodeError:
+    #     print("Invalid JSON received from MQTT, skipping...")
 
-    cv2.imshow("Fullscreen", ppf.render(offset=Point2Da(0, 0)))
+    if ppf:
+        cv2.imshow("Fullscreen", ppf.render(offset=Point2Da(0, 0)))
 
     # Break on 'q' key press
     if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -58,5 +57,5 @@ while running:
 # clean up
 mqtt.disconnect()
 cv2.destroyAllWindows()
-pygame.quit()
+# pygame.quit()
 sys.exit()

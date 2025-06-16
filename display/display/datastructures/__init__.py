@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pprint import pprint
 from typing import Dict, List
 
 import cv2
@@ -9,27 +10,6 @@ import numpy as np
 
 from ..geometry import Point2Da
 from ..transformer import HomographyTransformer
-
-
-class Messages:
-
-    def __init__(self):
-        self.messages: Dict[str, Dict] = {}
-
-    def add_message(self, message, id):
-        self.messages[id] = message
-
-    def get_message(self, id):
-        return self.messages.get(id)
-
-    def delete_message(self, id):
-        if id in self.messages:
-            del self.messages[id]
-        else:
-            raise KeyError(f"Message with id {id} not found.")
-
-    def get_all_messages(self) -> List[Dict]:
-        return self.messages.values()
 
 
 class Form:
@@ -69,11 +49,16 @@ class Circle(Form):
         })
 
     @staticmethod
-    def from_json(json_str: str) -> 'Circle':
-        """Create a Circle from a JSON string."""
-        data = json.loads(json_str)
+    def from_dict(data: Dict) -> 'Circle':
         center = Point2Da(data["center"]["x"], data["center"]["y"])
         return Circle(color=data["color"], center=center, radius=data["radius"], fill=data.get("fill", False))
+
+    @staticmethod
+    def from_json(json_str: str) -> 'Circle':
+        """Create a Circle from a JSON string."""
+        print("Circle.from_json", json_str)
+        data = json.loads(json_str)
+        return Circle.from_dict(data)
 
     def __str__(self):
         return f"Circle(center=({self.center[0]}, {self.center[1]}), radius={self.radius}, color={self.color}, fill={self.fill})"
@@ -100,11 +85,15 @@ class Polygon(Form):
         })
 
     @staticmethod
+    def from_dict(data: Dict) -> 'Polygon':
+        points = [Point2Da(p["x"], p["y"]) for p in data["points"]]
+        return Polygon(color=data["color"], points=points)
+
+    @staticmethod
     def from_json(json_str: str) -> 'Polygon':
         """Create a Polygon from a JSON string."""
         data = json.loads(json_str)
-        points = [Point2Da(p["x"], p["y"]) for p in data["points"]]
-        return Polygon(color=data["color"], points=points)
+        return Polygon.from_dict(data)
 
 
 class Text(Form):
@@ -124,11 +113,15 @@ class Text(Form):
         })
 
     @staticmethod
+    def from_dict(data: Dict) -> 'Text':
+        position = Point2Da.from_json(data["position"])
+        return Text(color=data["color"], position=position, text=data["text"], size=data.get("size", 36))
+
+    @staticmethod
     def from_json(json_str: str) -> 'Text':
         """Create a Text from a JSON string."""
         data = json.loads(json_str)
-        position = Point2Da.from_json(data["position"])
-        return Text(color=data["color"], position=position, text=data["text"], size=data["size"])
+        return Text.from_dict(data)
 
 
 class Playfield:
@@ -182,15 +175,33 @@ class Playfield:
     @staticmethod
     def from_json(json_str: str) -> 'Playfield':
         """Create a Playfield from a JSON string."""
-        data = json.loads(json_str)
+        try:
+            data = json.loads(json_str)
+        except Exception as e:
+            print("Error decoding JSON:", e)
+            pprint(json_str)
+            return None
+
         playfield = Playfield(data["width"], data["height"])
+
+        print(
+            f"Decoded Playfield: {data['width']}x{data['height']}, {len(data['forms'])} forms")
+
         for id, form_json in data["forms"].items():
+            form_json = json.loads(str(form_json)) if isinstance(
+                form_json, str) else form_json
+
+            # print(form_json)
+            # print(type(form_json))
+
+            # print(form_json["type"])
+
             if form_json["type"] == "Circle":
-                form = Circle.from_json(form_json)
+                form = Circle.from_dict(form_json)
             elif form_json["type"] == "Polygon":
-                form = Polygon.from_json(form_json)
+                form = Polygon.from_dict(form_json)
             elif form_json["type"] == "Text":
-                form = Text.from_json(form_json)
+                form = Text.from_dict(form_json)
             else:
                 raise ValueError(f"Unknown form type: {form_json['type']}")
             playfield.put_form(int(id), form)
