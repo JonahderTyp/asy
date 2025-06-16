@@ -188,13 +188,17 @@ class Playfield:
             f"Decoded Playfield: {data['width']}x{data['height']}, {len(data['forms'])} forms")
 
         for id, form_json in data["forms"].items():
+            if form_json is None:
+                print(f"Skipping form with id {id} as it is None")
+                continue
             form_json = json.loads(str(form_json)) if isinstance(
                 form_json, str) else form_json
 
             # print(form_json)
             # print(type(form_json))
 
-            # print(form_json["type"])
+            print(form_json["type"])
+            print(form_json)
 
             if form_json["type"] == "Circle":
                 form = Circle.from_dict(form_json)
